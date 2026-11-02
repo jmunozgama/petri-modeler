@@ -67,11 +67,13 @@ Two modes, switched with a toolbar button; the current mode is always visible.
 - Dragging a selected node moves every selected node; their arcs follow.
 - Delete or Backspace, or the Delete button, deletes the whole selection (with the
   arcs attached to deleted nodes).
-- **Context pad**: hovering or selecting a single node shows small buttons next to it:
-  - on a place, "append transition"; on a transition, "append place": creates the new
-    node to the right of it, joined by an arc from it, and selects the new node;
-  - "connect": the next click on another node creates an arc to it (or shows the
-    rejection message); Escape or a click on empty canvas cancels.
+- **Context pad**: selecting a single node shows small icon buttons next to it (no
+  text; a tooltip names each):
+  - on a place, a square ("append transition"); on a transition, a circle ("append
+    place"): creates the new node to the right of it, joined by an arc from it, and
+    selects the new node;
+  - an arrow ("connect"): the next click on another node creates an arc to it (or
+    shows the rejection message); Escape or a click on empty canvas cancels.
 - Selected node (only one): a properties bar edits its label and, for a place, its
   tokens.
 - **Undo / redo**: Cmd/Ctrl+Z and Shift+Cmd/Ctrl+Z, and toolbar buttons. Every change
