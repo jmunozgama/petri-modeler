@@ -18,6 +18,7 @@
   const PAD_SIZE = 24;     // context pad button, net units
   const PAD_GAP = 6;
   const APPEND_DX = 120;   // an appended node goes this far to the right
+  const LABEL_GAP = 7;     // space between a node and its label, clear of the label halo
   const CURVE_BEND = 0.25; // control-point offset of a curved arc, as a share of its length
   const TOKEN_R = 5;
   const MAX_DOTS = 5; // more tokens than this are drawn as a number
@@ -261,7 +262,7 @@
     for (const p of net.places) {
       const g = nodeGroup(p,
         svg('circle', { cx: p.x, cy: p.y, r: PLACE_R }),
-        p.y + PLACE_R + 4);
+        p.y + PLACE_R + LABEL_GAP);
       g.append(...tokenMarks(p, marking ? marking[p.id] : p.tokens));
       nodeLayer.append(g);
     }
@@ -272,7 +273,7 @@
           x: t.x - TRANSITION_W / 2, y: t.y - TRANSITION_H / 2,
           width: TRANSITION_W, height: TRANSITION_H,
         }),
-        t.y + TRANSITION_H / 2 + 4,
+        t.y + TRANSITION_H / 2 + LABEL_GAP,
         enabled.has(t.id)));
     }
     renderPad();

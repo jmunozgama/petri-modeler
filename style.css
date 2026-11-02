@@ -100,7 +100,8 @@ body.play #toolbar .edit-only, body:not(.play) #toolbar .play-only { display: no
 .node .token, .node.selected .token { fill: #000; stroke: none; pointer-events: none; }
 
 .token-count {
-  font-size: 18px;
+  font-size: 20px;
+  font-weight: 600;
   fill: #000;
   text-anchor: middle;
   dominant-baseline: central;
@@ -146,7 +147,7 @@ body.play #toolbar .edit-only, body:not(.play) #toolbar .play-only { display: no
 }
 
 .label {
-  font-size: 16px;
+  font-size: 18px; /* SPEC: at least 16 px; 18 reads better on a projector */
   fill: #000;
   text-anchor: middle;
   dominant-baseline: hanging;
@@ -154,7 +155,7 @@ body.play #toolbar .edit-only, body:not(.play) #toolbar .play-only { display: no
   /* white halo keeps a label readable when an arc passes under it */
   paint-order: stroke;
   stroke: #fff;
-  stroke-width: 8px;
+  stroke-width: 6px;
   stroke-linejoin: round;
 }
 
