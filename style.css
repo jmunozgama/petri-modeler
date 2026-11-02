@@ -143,3 +143,11 @@ body.play #toolbar .edit-only, body:not(.play) #toolbar .play-only { display: no
   padding: 6px 12px;
   border-top: 1px solid #000;
 }
+
+/* Context pad next to the single selected node. */
+.pad-button { cursor: pointer; }
+.pad-bg { fill: #fff; stroke: #000; stroke-width: 1.5; }
+.pad-button:hover .pad-bg { fill: #e3e3e3; }
+.pad-button.active .pad-bg { fill: #1565c0; stroke: #1565c0; }
+.pad-icon { fill: none; stroke: #000; stroke-width: 2; pointer-events: none; }
+.pad-button.active .pad-icon { stroke: #fff; }

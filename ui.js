@@ -15,6 +15,9 @@
   const FIT_MARGIN = 60;   // net units around the nodes, room for labels
   const BUTTON_ZOOM = 1.25;
   const PAN_THRESHOLD = 4; // screen px a press must move to count as a drag
+  const PAD_SIZE = 24;     // context pad button, net units
+  const PAD_GAP = 6;
+  const APPEND_DX = 120;   // an appended node goes this far to the right
   const CURVE_BEND = 0.25; // control-point offset of a curved arc, as a share of its length
   const TOKEN_R = 5;
   const MAX_DOTS = 5; // more tokens than this are drawn as a number
@@ -54,6 +57,7 @@
   let link = null;    // {source, line}: arc being drawn with the Arc tool
   let marquee = null; // {start, rect}: Shift+drag selection rectangle
   let pan = null;     // {client, view, moved, click}: press on empty canvas
+  let connect = null; // {source, line}: context pad "connect" waiting for a target
   let view = { x: 0, y: 0, k: 1 }; // top-left corner in net units, and zoom
 
   // ---- Helpers ----
@@ -112,8 +116,9 @@
   defs.append(arrow, arrowSelected);
   const arcLayer = svg('g', {});
   const nodeLayer = svg('g', {});
+  const padLayer = svg('g', {});
   const overlay = svg('g', {});
-  canvas.append(defs, arcLayer, nodeLayer, overlay);
+  canvas.append(defs, arcLayer, nodeLayer, padLayer, overlay);
 
   // Point where the line from the centre of `node` towards `to` leaves its shape.
   function boundary(node, isPlace, to) {
@@ -226,10 +231,46 @@
         t.y + TRANSITION_H / 2 + 4,
         enabled.has(t.id)));
     }
+    renderPad();
     updateProperties();
   }
 
+  function padButton(action, x, y, title, icon) {
+    const g = svg('g', { class: 'pad-button', 'data-action': action });
+    if (action === 'connect' && connect) g.classList.add('active');
+    const t = svg('title', {});
+    t.textContent = title;
+    g.append(t, svg('rect', { class: 'pad-bg', x, y, width: PAD_SIZE, height: PAD_SIZE, rx: 4 }), icon);
+    return g;
+  }
+
+  // Context pad: a row of icon buttons off the top-right corner of the single selected
+  // node (clear of horizontal arcs), Edit mode only.
+  function renderPad() {
+    padLayer.replaceChildren();
+    const node = mode === 'edit' && selectedNode();
+    if (!node) return;
+    const isPlace = net.places.includes(node);
+    const x = node.x + (isPlace ? PLACE_R : TRANSITION_W / 2);
+    const y = node.y - (isPlace ? PLACE_R : TRANSITION_H / 2) - PAD_SIZE;
+    const cx = x + PAD_SIZE / 2;
+    const cy = y + PAD_SIZE / 2;
+    const appendIcon = isPlace
+      ? svg('rect', { class: 'pad-icon', x: cx - 4, y: cy - 7, width: 8, height: 14 })
+      : svg('circle', { class: 'pad-icon', cx, cy, r: 7 });
+    const x2 = x + PAD_SIZE + PAD_GAP;
+    const connectIcon = svg('path', {
+      class: 'pad-icon',
+      d: `M${x2 + 5},${y + PAD_SIZE - 5} L${x2 + PAD_SIZE - 6},${y + 6}`
+        + ` M${x2 + PAD_SIZE - 13},${y + 6} L${x2 + PAD_SIZE - 6},${y + 6} L${x2 + PAD_SIZE - 6},${y + 13}`,
+    });
+    padLayer.append(
+      padButton('append', x, y, isPlace ? 'Append transition' : 'Append place', appendIcon),
+      padButton('connect', x2, y, 'Connect', connectIcon));
+  }
+
   function setTool(name) {
+    cancelConnect();
     tool = name;
     canvas.setAttribute('class', `tool-${name}`);
     for (const b of toolButtons) b.classList.toggle('active', b.dataset.tool === name);
@@ -238,6 +279,7 @@
   // Play starts from the initial marking; going back to Edit drops the play marking.
   function setMode(name) {
     if (document.activeElement) document.activeElement.blur(); // applies a pending edit
+    cancelConnect();
     mode = name;
     marking = name === 'play' ? Petri.initialMarking(net) : null;
     selection.clear();
@@ -392,6 +434,9 @@
     if (event.button !== 0) return;
     const nodeEl = event.target.closest('.node');
     const at = toNet(event);
+    const padEl = event.target.closest('.pad-button');
+    if (padEl) return padDown(padEl, at);
+    if (connect) return connectDown(nodeEl);
     canvas.setPointerCapture(event.pointerId);
 
     // Only the Select tool can pick arcs; for everything else an arc is empty canvas.
@@ -410,6 +455,50 @@
     }
   });
 
+  // ---- Context pad ----
+
+  // Appends a node of the other kind to the right, joined by an arc, and selects it.
+  function appendNode(node) {
+    attempt(() => {
+      const at = { x: node.x + APPEND_DX, y: node.y };
+      const id = net.places.includes(node) ? Petri.addTransition(net, at) : Petri.addPlace(net, at);
+      Petri.addArc(net, node.id, id);
+      selection = new Set([id]);
+    });
+  }
+
+  function startConnect(node, at) {
+    cancelConnect();
+    const line = svg('line', { class: 'rubber', x1: node.x, y1: node.y, x2: at.x, y2: at.y });
+    overlay.append(line);
+    connect = { source: node.id, line };
+    render();
+  }
+
+  function cancelConnect() {
+    if (!connect) return;
+    connect.line.remove();
+    connect = null;
+    render();
+  }
+
+  function padDown(button, at) {
+    const node = selectedNode();
+    if (!node) return;
+    if (button.dataset.action === 'append') appendNode(node);
+    else if (connect) cancelConnect();
+    else startConnect(node, at);
+  }
+
+  // While connecting, the next click on another node makes the arc; anything else cancels.
+  function connectDown(nodeEl) {
+    const { source } = connect;
+    cancelConnect();
+    if (nodeEl && nodeEl.dataset.id !== source) {
+      attempt(() => Petri.addArc(net, source, nodeEl.dataset.id));
+    }
+  }
+
   // A click (no drag) on empty canvas: create a node, or clear the selection.
   function emptyClick(at) {
     if (mode !== 'edit') return;
@@ -424,6 +513,11 @@
   }
 
   canvas.addEventListener('pointermove', (event) => {
+    if (connect) {
+      const at = toNet(event);
+      connect.line.setAttribute('x2', at.x);
+      connect.line.setAttribute('y2', at.y);
+    }
     if (pan) return movePan(event);
     if (link) {
       const at = toNet(event);
@@ -553,6 +647,7 @@
 
   document.addEventListener('keydown', (event) => {
     if (event.target.closest('input, textarea')) return;
+    if (event.key === 'Escape') cancelConnect();
     if (mode === 'edit' && (event.key === 'Delete' || event.key === 'Backspace')) {
       event.preventDefault();
       deleteSelection();
