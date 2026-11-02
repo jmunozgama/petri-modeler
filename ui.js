@@ -37,6 +37,8 @@
   const modeButtons = document.querySelectorAll('[data-mode]');
   const resetButton = document.getElementById('reset');
   const deleteButton = document.getElementById('delete');
+  const undoButton = document.getElementById('undo');
+  const redoButton = document.getElementById('redo');
   const exportButton = document.getElementById('export');
   const importButton = document.getElementById('import');
   const importFile = document.getElementById('import-file');
@@ -58,6 +60,8 @@
   let marquee = null; // {start, rect}: Shift+drag selection rectangle
   let pan = null;     // {client, view, moved, click}: press on empty canvas
   let connect = null; // {source, line}: context pad "connect" waiting for a target
+  let undoStack = [];   // nets before each change, newest last
+  let redoStack = [];   // nets undone, newest last
   let view = { x: 0, y: 0, k: 1 }; // top-left corner in net units, and zoom
 
   // ---- Helpers ----
@@ -92,14 +96,52 @@
     messageTimer = setTimeout(() => { status.textContent = ''; }, MESSAGE_MS);
   }
 
-  // Runs a Petri call; a rejection becomes a status message and the net stays as it was.
-  function attempt(change) {
+  // Runs Petri calls as one step: a rejection becomes a status message and the net
+  // goes back to how it was (also when an earlier call of the step succeeded); a step
+  // that changed the net can be undone. `record` false: a node drag records once, at
+  // its end.
+  function attempt(change, record = true) {
+    const before = structuredClone(net);
+    const json = JSON.stringify(net);
     try {
       change();
     } catch (err) {
       showMessage(err.message);
+      if (JSON.stringify(net) !== json) net = before;
     }
+    if (record && JSON.stringify(net) !== json) pushUndo(before);
     render();
+  }
+
+  // ---- Undo / redo ----
+
+  // A new change drops the redo steps.
+  function pushUndo(before) {
+    undoStack.push(before);
+    redoStack = [];
+  }
+
+  // Restoring a net keeps the id counters where they are, so ids are never reused.
+  function restore(saved) {
+    saved.next = {
+      p: Math.max(saved.next.p, net.next.p),
+      t: Math.max(saved.next.t, net.next.t),
+    };
+    net = saved;
+    cancelConnect();
+    render();
+  }
+
+  function undo() {
+    if (mode !== 'edit' || undoStack.length === 0) return;
+    redoStack.push(net);
+    restore(undoStack.pop());
+  }
+
+  function redo() {
+    if (mode !== 'edit' || redoStack.length === 0) return;
+    undoStack.push(net);
+    restore(redoStack.pop());
   }
 
   // ---- Rendering ----
@@ -198,6 +240,8 @@
     for (const a of net.arcs) ids.add(Petri.arcId(a.source, a.target));
     selection = new Set([...selection].filter((id) => ids.has(id)));
     deleteButton.disabled = selection.size === 0;
+    undoButton.disabled = undoStack.length === 0;
+    redoButton.disabled = redoStack.length === 0;
 
     arcLayer.replaceChildren();
     nodeLayer.replaceChildren();
@@ -373,7 +417,7 @@
 
   function startMoving(at) {
     const nodes = [...selection].map(findNode).filter(Boolean).map(({ id, x, y }) => ({ id, x, y }));
-    drag = { start: at, nodes };
+    drag = { start: at, nodes, before: structuredClone(net) };
   }
 
   // Select tool: click selects one element, Shift+click toggles one, Shift+drag on
@@ -533,7 +577,7 @@
     const at = toNet(event);
     const dx = at.x - drag.start.x;
     const dy = at.y - drag.start.y;
-    attempt(() => { for (const n of drag.nodes) Petri.move(net, n.id, n.x + dx, n.y + dy); });
+    attempt(() => { for (const n of drag.nodes) Petri.move(net, n.id, n.x + dx, n.y + dy); }, false);
   });
 
   // Dropping a new arc on another node asks Petri to add it; dropping it on empty
@@ -554,6 +598,10 @@
     if (pan) endPan(event);
     if (link) finishLink(event);
     if (marquee) finishMarquee(event);
+    if (drag && JSON.stringify(drag.before) !== JSON.stringify(net)) {
+      pushUndo(drag.before);
+      render();
+    }
     drag = null;
     if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
   }
@@ -574,7 +622,8 @@
     if (!node) return;
     const raw = tokensInput.value.trim();
     attempt(() => Petri.setTokens(net, node.id, raw === '' ? raw : Number(raw)));
-    if (selectedNode() === node) tokensInput.value = node.tokens;
+    const now = findNode(node.id);
+    if (now && selectedNode() === now) tokensInput.value = now.tokens;
   });
   for (const input of [labelInput, tokensInput]) {
     input.addEventListener('focus', () => {
@@ -616,6 +665,7 @@
     }
     const empty = net.places.length === 0 && net.transitions.length === 0;
     if (!empty && !window.confirm('Replace the current net with the imported one?')) return;
+    pushUndo(net);
     net = imported;
     setMode('edit');
     fit();
@@ -639,6 +689,8 @@
     zoomAt(netPoint(event), Math.exp(-pixels * speed));
   }, { passive: false });
   deleteButton.addEventListener('click', deleteSelection);
+  undoButton.addEventListener('click', undo);
+  redoButton.addEventListener('click', redo);
   for (const b of modeButtons) b.addEventListener('click', () => setMode(b.dataset.mode));
   resetButton.addEventListener('click', () => {
     marking = Petri.initialMarking(net);
@@ -648,6 +700,12 @@
   document.addEventListener('keydown', (event) => {
     if (event.target.closest('input, textarea')) return;
     if (event.key === 'Escape') cancelConnect();
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') {
+      event.preventDefault();
+      if (event.shiftKey) redo();
+      else undo();
+      return;
+    }
     if (mode === 'edit' && (event.key === 'Delete' || event.key === 'Backspace')) {
       event.preventDefault();
       deleteSelection();

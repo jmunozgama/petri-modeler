@@ -23,6 +23,8 @@
     </div>
     <div class="group edit-only" role="group" aria-label="Edit">
       <button type="button" id="delete" title="Delete selection (Delete or Backspace)">Delete</button>
+      <button type="button" id="undo" title="Undo (Cmd/Ctrl+Z)">Undo</button>
+      <button type="button" id="redo" title="Redo (Shift+Cmd/Ctrl+Z)">Redo</button>
     </div>
     <div class="group" role="group" aria-label="File">
       <button type="button" id="export" title="Download the net as petrinet.json">Export</button>
@@ -34,12 +36,15 @@
       <button type="button" id="zoom-out" title="Zoom out">−</button>
       <button type="button" id="fit" title="Fit the net to the screen">Fit</button>
     </div>
-    <div class="group edit-only" id="properties" role="group" aria-label="Properties" hidden>
+  </header>
+  <main id="stage">
+    <svg id="canvas" xmlns="http://www.w3.org/2000/svg"></svg>
+    <!-- Floats over the canvas: showing it never moves the drawing. -->
+    <div id="properties" role="group" aria-label="Properties" hidden>
       <label>Label <input type="text" id="prop-label" size="12"></label>
       <label id="prop-tokens-field">Tokens <input type="number" id="prop-tokens" min="0" step="1"></label>
     </div>
-  </header>
-  <svg id="canvas" xmlns="http://www.w3.org/2000/svg"></svg>
+  </main>
   <footer id="status" role="status" aria-live="polite"></footer>
   <script src="petri.js"></script>
   <script src="ui.js"></script>
