@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Petri Net Modeler</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header id="toolbar">
+    <div class="group" role="group" aria-label="Tools">
+      <button type="button" data-tool="select">Select</button>
+      <button type="button" data-tool="place">Place</button>
+      <button type="button" data-tool="transition">Transition</button>
+    </div>
+  </header>
+  <svg id="canvas" xmlns="http://www.w3.org/2000/svg"></svg>
+  <footer id="status" role="status" aria-live="polite"></footer>
+  <script src="petri.js"></script>
+  <script src="ui.js"></script>
+</body>
+</html>

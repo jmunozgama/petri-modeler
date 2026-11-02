@@ -1,0 +1,71 @@
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: #fff;
+  color: #000;
+  font: 16px system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+#toolbar {
+  display: flex;
+  gap: 16px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #000;
+}
+
+#toolbar .group { display: flex; gap: 4px; }
+
+#toolbar button {
+  font: inherit;
+  padding: 6px 12px;
+  background: #fff;
+  color: #000;
+  border: 1px solid #000;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+#toolbar button.active {
+  background: #000;
+  color: #fff;
+}
+
+#canvas {
+  flex: 1;
+  width: 100%;
+  display: block;
+  touch-action: none;
+  user-select: none;
+}
+
+#canvas.tool-place, #canvas.tool-transition { cursor: crosshair; }
+
+.node { cursor: default; }
+#canvas.tool-select .node { cursor: move; }
+
+.node circle, .node rect {
+  fill: #fff;
+  stroke: #000;
+  stroke-width: 2;
+}
+
+.label {
+  font-size: 16px;
+  fill: #000;
+  text-anchor: middle;
+  dominant-baseline: hanging;
+  pointer-events: none;
+}
+
+#status {
+  min-height: 2em;
+  padding: 6px 12px;
+  border-top: 1px solid #000;
+}
