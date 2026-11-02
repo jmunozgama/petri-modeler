@@ -41,7 +41,8 @@ is either a test or something checked by looking at the page.
 - The net is plain data; the play marking is separate from the net, so playing never
   changes the initial marking.
 - Edit: `createNet()`, `addPlace(net, {x, y, label?, tokens?})` → id,
-  `addTransition(net, {x, y, label?})` → id, `addArc(net, source, target)`,
+  `addTransition(net, {x, y, label?})` → id, `addArc(net, source, target)` → arc id
+  (not written to JSON),
   `remove(net, id)` (node or arc), `setLabel(net, id, label)`,
   `setTokens(net, placeId, n)`, `move(net, id, x, y)`.
 - Play: `initialMarking(net)` → `{placeId: n}` with every place, zeros included;
@@ -50,7 +51,8 @@ is either a test or something checked by looking at the page.
 - I/O: `exportNet(net)` → JSON string; `importNet(text)` → net, or an error with a
   message saying what is wrong.
 - Invalid calls (unknown id, invalid or duplicate arc, negative or non-integer tokens,
-  disabled transition) throw an `Error` with a readable message and change nothing.
+  disabled transition) throw a plain `Error` (not a `TypeError` or the parser's
+  `SyntaxError`) with a readable message and change nothing; `importNet` too.
 
 ## Interactions
 
