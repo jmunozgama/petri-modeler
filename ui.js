@@ -25,6 +25,8 @@
   const canvas = document.getElementById('canvas');
   const status = document.getElementById('status');
   const toolButtons = document.querySelectorAll('[data-tool]');
+  const modeButtons = document.querySelectorAll('[data-mode]');
+  const resetButton = document.getElementById('reset');
   const deleteButton = document.getElementById('delete');
   const properties = document.getElementById('properties');
   const labelInput = document.getElementById('prop-label');
@@ -32,6 +34,8 @@
   const tokensInput = document.getElementById('prop-tokens');
 
   let net = Petri.createNet();
+  let mode = 'edit';
+  let marking = null; // play marking, kept apart from the net; null in Edit mode
   let tool = 'select';
   let selection = new Set(); // ids of selected nodes and arcs
   let drag = null;    // {start, nodes: [{id, x, y}]}: selected nodes being moved
@@ -125,10 +129,11 @@
     return `M${s.x},${s.y} Q${c.x},${c.y} ${e.x},${e.y}`;
   }
 
-  function nodeGroup(node, shape, labelY) {
-    const g = svg('g', {
-      class: selection.has(node.id) ? 'node selected' : 'node', 'data-id': node.id,
-    });
+  function nodeGroup(node, shape, labelY, enabled) {
+    let cls = 'node';
+    if (selection.has(node.id)) cls += ' selected';
+    if (enabled) cls += ' enabled';
+    const g = svg('g', { class: cls, 'data-id': node.id });
     g.append(shape);
     const label = svg('text', { class: 'label', x: node.x, y: labelY });
     label.textContent = node.label;
@@ -136,13 +141,13 @@
     return g;
   }
 
-  function tokenMarks(p) {
-    if (p.tokens > MAX_DOTS) {
+  function tokenMarks(p, n) {
+    if (n > MAX_DOTS) {
       const count = svg('text', { class: 'token-count', x: p.x, y: p.y });
-      count.textContent = p.tokens;
+      count.textContent = n;
       return [count];
     }
-    return DOTS[p.tokens].map(([dx, dy]) =>
+    return DOTS[n].map(([dx, dy]) =>
       svg('circle', { class: 'token', cx: p.x + dx, cy: p.y + dy, r: TOKEN_R }));
   }
 
@@ -189,16 +194,18 @@
       const g = nodeGroup(p,
         svg('circle', { cx: p.x, cy: p.y, r: PLACE_R }),
         p.y + PLACE_R + 4);
-      g.append(...tokenMarks(p));
+      g.append(...tokenMarks(p, marking ? marking[p.id] : p.tokens));
       nodeLayer.append(g);
     }
+    const enabled = new Set(marking ? Petri.enabledTransitions(net, marking) : []);
     for (const t of net.transitions) {
       nodeLayer.append(nodeGroup(t,
         svg('rect', {
           x: t.x - TRANSITION_W / 2, y: t.y - TRANSITION_H / 2,
           width: TRANSITION_W, height: TRANSITION_H,
         }),
-        t.y + TRANSITION_H / 2 + 4));
+        t.y + TRANSITION_H / 2 + 4,
+        enabled.has(t.id)));
     }
     updateProperties();
   }
@@ -207,6 +214,29 @@
     tool = name;
     canvas.setAttribute('class', `tool-${name}`);
     for (const b of toolButtons) b.classList.toggle('active', b.dataset.tool === name);
+  }
+
+  // Play starts from the initial marking; going back to Edit drops the play marking.
+  function setMode(name) {
+    if (document.activeElement) document.activeElement.blur(); // applies a pending edit
+    mode = name;
+    marking = name === 'play' ? Petri.initialMarking(net) : null;
+    selection.clear();
+    document.body.classList.toggle('play', name === 'play');
+    for (const b of modeButtons) b.classList.toggle('active', b.dataset.mode === name);
+    if (name === 'play') canvas.setAttribute('class', 'play');
+    else setTool(tool);
+    render();
+  }
+
+  // Play: a click on an enabled transition fires it; anything else does nothing.
+  function playDown(nodeEl) {
+    const id = nodeEl && nodeEl.dataset.id;
+    if (!id || !net.transitions.some((t) => t.id === id)) return;
+    if (Petri.isEnabled(net, marking, id)) {
+      marking = Petri.fire(net, marking, id);
+      render();
+    }
   }
 
   // ---- Interaction ----
@@ -281,6 +311,7 @@
     const at = toNet(event);
     canvas.setPointerCapture(event.pointerId);
 
+    if (mode === 'play') return playDown(nodeEl);
     if (tool === 'select') return selectDown(event, at);
 
     if (!nodeEl) {
@@ -371,15 +402,20 @@
 
   for (const b of toolButtons) b.addEventListener('click', () => setTool(b.dataset.tool));
   deleteButton.addEventListener('click', deleteSelection);
+  for (const b of modeButtons) b.addEventListener('click', () => setMode(b.dataset.mode));
+  resetButton.addEventListener('click', () => {
+    marking = Petri.initialMarking(net);
+    render();
+  });
 
   document.addEventListener('keydown', (event) => {
     if (event.target.closest('input, textarea')) return;
-    if (event.key === 'Delete' || event.key === 'Backspace') {
+    if (mode === 'edit' && (event.key === 'Delete' || event.key === 'Backspace')) {
       event.preventDefault();
       deleteSelection();
     }
   });
 
   setTool('select');
-  render();
+  setMode('edit');
 })();

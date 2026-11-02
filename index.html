@@ -8,16 +8,23 @@
 </head>
 <body>
   <header id="toolbar">
-    <div class="group" role="group" aria-label="Tools">
+    <div class="group" role="group" aria-label="Mode">
+      <button type="button" data-mode="edit">Edit</button>
+      <button type="button" data-mode="play">Play</button>
+    </div>
+    <div class="group play-only" role="group" aria-label="Play">
+      <button type="button" id="reset" title="Back to the initial marking">Reset</button>
+    </div>
+    <div class="group edit-only" role="group" aria-label="Tools">
       <button type="button" data-tool="select">Select</button>
       <button type="button" data-tool="place">Place</button>
       <button type="button" data-tool="transition">Transition</button>
       <button type="button" data-tool="arc">Arc</button>
     </div>
-    <div class="group" role="group" aria-label="Edit">
+    <div class="group edit-only" role="group" aria-label="Edit">
       <button type="button" id="delete" title="Delete selection (Delete or Backspace)">Delete</button>
     </div>
-    <div class="group" id="properties" role="group" aria-label="Properties" hidden>
+    <div class="group edit-only" id="properties" role="group" aria-label="Properties" hidden>
       <label>Label <input type="text" id="prop-label" size="12"></label>
       <label id="prop-tokens-field">Tokens <input type="number" id="prop-tokens" min="0" step="1"></label>
     </div>

@@ -43,6 +43,8 @@ body {
   color: #fff;
 }
 
+body.play #toolbar .edit-only, body:not(.play) #toolbar .play-only { display: none; }
+
 #properties { margin-left: auto; align-items: center; gap: 12px; }
 #properties[hidden], #properties [hidden] { display: none; }
 
@@ -102,6 +104,10 @@ body {
 .node.selected circle, .node.selected rect { stroke: #1565c0; stroke-width: 4; }
 .arc.selected path:not(.hit) { stroke: #1565c0; stroke-width: 3; }
 #arrow-selected path { fill: #1565c0; }
+
+/* Play mode: enabled transitions are the one colour. */
+.node.enabled rect { fill: #c8e6c9; stroke: #2e7d32; stroke-width: 5; }
+#canvas.play .node.enabled { cursor: pointer; }
 
 .marquee {
   fill: rgba(21, 101, 192, 0.08);
