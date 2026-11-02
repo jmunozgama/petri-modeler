@@ -53,12 +53,13 @@ describe('ids and labels', () => {
       format: 'petri-modeler', version: 1,
       places: [
         { id: 'p1', label: 'a', x: 0, y: 0, tokens: 0 },
-        { id: 'p5', label: 'b', x: 0, y: 0, tokens: 0 },
+        { id: 'p10', label: 'b', x: 0, y: 0, tokens: 0 },
+        { id: 'p9', label: 'c', x: 0, y: 0, tokens: 0 },
       ],
-      transitions: [{ id: 't3', label: 'c', x: 0, y: 0 }],
+      transitions: [{ id: 't3', label: 'd', x: 0, y: 0 }],
       arcs: [],
     }));
-    assert.equal(addPlace(net, { x: 0, y: 0 }), 'p6');
+    assert.equal(addPlace(net, { x: 0, y: 0 }), 'p11');
     assert.equal(addTransition(net, { x: 0, y: 0 }), 't4');
   });
 
@@ -77,6 +78,14 @@ describe('ids and labels', () => {
     assert.equal(place(net, p).label, 'start');
     assert.equal(place(net, p).tokens, 2);
     assert.equal(transition(net, t).label, 'register');
+  });
+
+  test('an empty label given on creation stays empty', () => {
+    const net = createNet();
+    const p = addPlace(net, { x: 0, y: 0, label: '' });
+    const t = addTransition(net, { x: 0, y: 0, label: '' });
+    assert.equal(place(net, p).label, '');
+    assert.equal(transition(net, t).label, '');
   });
 
   test('setLabel accepts empty and repeated labels', () => {
@@ -138,7 +147,7 @@ describe('tokens (initial marking)', () => {
   });
 
   for (const n of [-1, 1.5, '2', NaN, null]) {
-    test(`setTokens with ${JSON.stringify(n) ?? String(n)} throws and changes nothing`, () => {
+    test(`setTokens with ${typeof n === 'string' ? `"${n}"` : String(n)} throws and changes nothing`, () => {
       const net = createNet();
       const p = addPlace(net, { x: 0, y: 0, tokens: 1 });
       assertRejected(net, () => setTokens(net, p, n));
@@ -149,6 +158,7 @@ describe('tokens (initial marking)', () => {
     const net = createNet();
     assertRejected(net, () => addPlace(net, { x: 0, y: 0, tokens: -1 }));
     assertRejected(net, () => addPlace(net, { x: 0, y: 0, tokens: 0.5 }));
+    assert.equal(addPlace(net, { x: 0, y: 0 }), 'p1');
   });
 
   test('setTokens on an unknown id or on a transition throws and changes nothing', () => {
@@ -201,7 +211,10 @@ describe('arcs', () => {
     const t1 = addTransition(net, { x: 0, y: 0 });
     addArc(net, p1, t1);
     addArc(net, t1, p1);
-    assert.equal(arcs(net).length, 2);
+    assert.deepEqual(arcs(net), [
+      { source: p1, target: t1 },
+      { source: t1, target: p1 },
+    ]);
   });
 
   test('an arc to or from an unknown node is rejected and the net is unchanged', () => {
@@ -252,6 +265,37 @@ describe('deletion', () => {
     assert.deepEqual(place(net, p1), { id: p1, label: p1, x: 0, y: 0, tokens: 2 });
     assert.deepEqual(transition(net, t1), { id: t1, label: t1, x: 0, y: 0 });
     assert.deepEqual(initialMarking(net), { [p1]: 2 });
+  });
+
+  test('deleting a node in a self-loop deletes both arcs', () => {
+    const net = createNet();
+    const p1 = addPlace(net, { x: 0, y: 0 });
+    const t1 = addTransition(net, { x: 0, y: 0 });
+    addArc(net, p1, t1);
+    addArc(net, t1, p1);
+    remove(net, t1);
+    assert.deepEqual(arcs(net), []);
+  });
+
+  test('a deleted place is no longer in the initial marking', () => {
+    const net = createNet();
+    const p1 = addPlace(net, { x: 0, y: 0, tokens: 1 });
+    const p2 = addPlace(net, { x: 0, y: 0, tokens: 2 });
+    remove(net, p1);
+    assert.deepEqual(initialMarking(net), { [p2]: 2 });
+  });
+
+  test('removing an arc that is already gone throws and changes nothing', () => {
+    const net = createNet();
+    const p1 = addPlace(net, { x: 0, y: 0 });
+    const t1 = addTransition(net, { x: 0, y: 0 });
+    const a1 = addArc(net, p1, t1);
+    remove(net, a1);
+    assertRejected(net, () => remove(net, a1));
+    const p2 = addPlace(net, { x: 0, y: 0 });
+    const a2 = addArc(net, p2, t1);
+    remove(net, p2);
+    assertRejected(net, () => remove(net, a2));
   });
 
   test('removing an unknown id throws and changes nothing', () => {
@@ -330,6 +374,7 @@ describe('play: enabling and firing', () => {
     addArc(net, t1, p1);
     addArc(net, t1, p2);
     assert.equal(isEnabled(net, initialMarking(net), t1), false);
+    assert.throws(() => fire(net, initialMarking(net), t1), isRejection);
     setTokens(net, p1, 1);
     assert.deepEqual(fire(net, initialMarking(net), t1), { [p1]: 1, [p2]: 1 });
   });
@@ -341,9 +386,28 @@ describe('play: enabling and firing', () => {
     const t1 = addTransition(net, { x: 0, y: 0 });
     addArc(net, p1, t1);
     addArc(net, t1, p2);
+    const before = exportNet(net);
     const m = initialMarking(net);
     assert.throws(() => fire(net, m, t1), isRejection);
     assert.deepEqual(m, { [p1]: 0, [p2]: 0 });
+    assert.equal(exportNet(net), before);
+  });
+
+  test('enabling is decided by the given marking, not by the initial one', () => {
+    const net = createNet();
+    const p1 = addPlace(net, { x: 0, y: 0, tokens: 1 });
+    const p2 = addPlace(net, { x: 0, y: 0 });
+    const t1 = addTransition(net, { x: 0, y: 0 });
+    const t2 = addTransition(net, { x: 0, y: 0 });
+    addArc(net, p1, t1);
+    addArc(net, t1, p2);
+    addArc(net, p2, t2);
+    const m1 = fire(net, initialMarking(net), t1);
+    assert.equal(isEnabled(net, m1, t1), false);
+    assert.equal(isEnabled(net, m1, t2), true);
+    assert.deepEqual(enabledTransitions(net, m1), [t2]);
+    assert.throws(() => fire(net, m1, t1), isRejection);
+    assert.deepEqual(fire(net, m1, t2), { [p1]: 0, [p2]: 0 });
   });
 
   test('fire returns a new marking: M, the initial marking and the net are not modified', () => {
@@ -373,16 +437,44 @@ describe('play: enabling and firing', () => {
     addArc(net, p1, t2);
     addArc(net, p2, t3);
     const m = initialMarking(net);
+    assert.ok(Array.isArray(enabledTransitions(net, m)));
     assert.deepEqual(sorted(enabledTransitions(net, m)), [t1, t2]);
     assert.deepEqual(enabledTransitions(net, fire(net, m, t1)), []);
   });
 
-  test('isEnabled and fire on an unknown transition throw', () => {
+  test('enabledTransitions includes a transition with no input places', () => {
     const net = createNet();
-    addPlace(net, { x: 0, y: 0 });
+    const p1 = addPlace(net, { x: 0, y: 0 });
+    const t1 = addTransition(net, { x: 0, y: 0 });
+    const t2 = addTransition(net, { x: 0, y: 0 });
+    addArc(net, p1, t2);
+    assert.deepEqual(enabledTransitions(net, initialMarking(net)), [t1]);
+  });
+
+  test('isEnabled and fire on an unknown id or on a place throw and change nothing', () => {
+    const net = createNet();
+    const p1 = addPlace(net, { x: 0, y: 0, tokens: 1 });
+    const before = exportNet(net);
     const m = initialMarking(net);
-    assert.throws(() => isEnabled(net, m, 't9'), isRejection);
-    assert.throws(() => fire(net, m, 't9'), isRejection);
+    for (const id of ['t9', p1]) {
+      assert.throws(() => isEnabled(net, m, id), isRejection);
+      assert.throws(() => fire(net, m, id), isRejection);
+    }
+    assert.deepEqual(m, { [p1]: 1 });
+    assert.equal(exportNet(net), before);
+  });
+
+  test('the net is plain data: a structuredClone behaves the same and is independent', () => {
+    const net = createNet();
+    const p1 = addPlace(net, { x: 0, y: 0, tokens: 1 });
+    const t1 = addTransition(net, { x: 0, y: 0 });
+    addArc(net, p1, t1);
+    const copy = structuredClone(net);
+    assert.equal(exportNet(copy), exportNet(net));
+    assert.equal(addPlace(copy, { x: 0, y: 0 }), 'p2');
+    assert.deepEqual(fire(copy, initialMarking(copy), t1), { [p1]: 0, p2: 0 });
+    assert.deepEqual(initialMarking(net), { [p1]: 1 });
+    assert.equal(addPlace(net, { x: 0, y: 0 }), 'p2');
   });
 });
 
@@ -424,10 +516,13 @@ describe('JSON import and export', () => {
     addArc(net, t1, p1);
     addArc(net, t1, p2);
     addArc(net, p2, t2);
-    remove(net, addPlace(net, { x: 0, y: 0 }));
+    const p3 = addPlace(net, { x: 9, y: 9 });
+    addPlace(net, { x: 9, y: 9 });
+    remove(net, p3);
     const copy = importNet(exportNet(net));
     assert.deepEqual(view(copy), view(net));
     assert.deepEqual(initialMarking(copy), initialMarking(net));
+    assert.equal(addPlace(copy, { x: 0, y: 0 }), 'p5');
   });
 
   test('an empty net round-trips', () => {
@@ -441,15 +536,25 @@ describe('JSON import and export', () => {
     'wrong format': withChange((d) => { d.format = 'pnml'; }),
     'missing format': withChange((d) => { delete d.format; }),
     'wrong version': withChange((d) => { d.version = 2; }),
+    'missing version': withChange((d) => { delete d.version; }),
     'missing places': withChange((d) => { delete d.places; }),
+    'missing transitions': withChange((d) => { delete d.transitions; }),
     'missing arcs': withChange((d) => { delete d.arcs; }),
     'place without x': withChange((d) => { delete d.places[0].x; }),
+    'place without y': withChange((d) => { delete d.places[0].y; }),
+    'place without label': withChange((d) => { delete d.places[0].label; }),
     'place without tokens': withChange((d) => { delete d.places[0].tokens; }),
     'transition without id': withChange((d) => { delete d.transitions[0].id; }),
+    'transition without label': withChange((d) => { delete d.transitions[0].label; }),
+    'transition without x': withChange((d) => { delete d.transitions[0].x; }),
+    'transition without y': withChange((d) => { delete d.transitions[0].y; }),
+    'arc without source': withChange((d) => { delete d.arcs[0].source; }),
     'arc without target': withChange((d) => { delete d.arcs[0].target; }),
     'duplicate place id': withChange((d) => { d.places.push({ ...d.places[0] }); }),
+    'duplicate transition id': withChange((d) => { d.transitions.push({ ...d.transitions[0] }); }),
     'same id for a place and a transition': withChange((d) => { d.transitions[0].id = 'p1'; d.arcs = []; }),
     'arc to an unknown node': withChange((d) => { d.arcs[0].target = 't9'; }),
+    'arc from an unknown node': withChange((d) => { d.arcs[0].source = 'p9'; }),
     'place→place arc': withChange((d) => {
       d.places.push({ id: 'p2', label: 'p2', x: 0, y: 0, tokens: 0 });
       d.arcs.push({ source: 'p1', target: 'p2' });
