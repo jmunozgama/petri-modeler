@@ -17,6 +17,10 @@
     <div class="group" role="group" aria-label="Edit">
       <button type="button" id="delete" title="Delete selection (Delete or Backspace)">Delete</button>
     </div>
+    <div class="group" id="properties" role="group" aria-label="Properties" hidden>
+      <label>Label <input type="text" id="prop-label" size="12"></label>
+      <label id="prop-tokens-field">Tokens <input type="number" id="prop-tokens" min="0" step="1"></label>
+    </div>
   </header>
   <svg id="canvas" xmlns="http://www.w3.org/2000/svg"></svg>
   <footer id="status" role="status" aria-live="polite"></footer>

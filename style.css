@@ -43,6 +43,18 @@ body {
   color: #fff;
 }
 
+#properties { margin-left: auto; align-items: center; gap: 12px; }
+#properties[hidden], #properties [hidden] { display: none; }
+
+#properties input {
+  font: inherit;
+  padding: 5px 8px;
+  border: 1px solid #000;
+  border-radius: 4px;
+}
+
+#prop-tokens { width: 5em; }
+
 #canvas {
   flex: 1;
   width: 100%;
@@ -60,6 +72,16 @@ body {
   fill: #fff;
   stroke: #000;
   stroke-width: 2;
+}
+
+.node .token, .node.selected .token { fill: #000; stroke: none; pointer-events: none; }
+
+.token-count {
+  font-size: 18px;
+  fill: #000;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
 }
 
 .arc path {

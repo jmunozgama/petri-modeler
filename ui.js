@@ -10,11 +10,26 @@
   const TRANSITION_H = 60;
   const MESSAGE_MS = 4000;
   const CURVE_BEND = 0.25; // control-point offset of a curved arc, as a share of its length
+  const TOKEN_R = 5;
+  const MAX_DOTS = 5; // more tokens than this are drawn as a number
+  // Dot offsets from the place centre for 1 to MAX_DOTS tokens.
+  const DOTS = [
+    [],
+    [[0, 0]],
+    [[-7, 0], [7, 0]],
+    [[0, -7], [-7, 6], [7, 6]],
+    [[-7, -7], [7, -7], [-7, 7], [7, 7]],
+    [[-10, -10], [10, -10], [0, 0], [-10, 10], [10, 10]],
+  ];
 
   const canvas = document.getElementById('canvas');
   const status = document.getElementById('status');
   const toolButtons = document.querySelectorAll('[data-tool]');
   const deleteButton = document.getElementById('delete');
+  const properties = document.getElementById('properties');
+  const labelInput = document.getElementById('prop-label');
+  const tokensField = document.getElementById('prop-tokens-field');
+  const tokensInput = document.getElementById('prop-tokens');
 
   let net = Petri.createNet();
   let tool = 'select';
@@ -121,6 +136,33 @@
     return g;
   }
 
+  function tokenMarks(p) {
+    if (p.tokens > MAX_DOTS) {
+      const count = svg('text', { class: 'token-count', x: p.x, y: p.y });
+      count.textContent = p.tokens;
+      return [count];
+    }
+    return DOTS[p.tokens].map(([dx, dy]) =>
+      svg('circle', { class: 'token', cx: p.x + dx, cy: p.y + dy, r: TOKEN_R }));
+  }
+
+  // The single selected node, or null when the selection is empty, an arc or several.
+  function selectedNode() {
+    if (selection.size !== 1) return null;
+    return findNode([...selection][0]) || null;
+  }
+
+  // Shows the bar for exactly one selected node; a field being typed in is left alone.
+  function updateProperties() {
+    const node = selectedNode();
+    properties.hidden = !node;
+    if (!node) return;
+    const isPlace = net.places.includes(node);
+    tokensField.hidden = !isPlace;
+    if (document.activeElement !== labelInput) labelInput.value = node.label;
+    if (isPlace && document.activeElement !== tokensInput) tokensInput.value = node.tokens;
+  }
+
   function render() {
     // Elements deleted from the net leave the selection.
     const ids = new Set([...net.places, ...net.transitions].map((n) => n.id));
@@ -144,9 +186,11 @@
       arcLayer.append(g);
     }
     for (const p of net.places) {
-      nodeLayer.append(nodeGroup(p,
+      const g = nodeGroup(p,
         svg('circle', { cx: p.x, cy: p.y, r: PLACE_R }),
-        p.y + PLACE_R + 4));
+        p.y + PLACE_R + 4);
+      g.append(...tokenMarks(p));
+      nodeLayer.append(g);
     }
     for (const t of net.transitions) {
       nodeLayer.append(nodeGroup(t,
@@ -156,6 +200,7 @@
         }),
         t.y + TRANSITION_H / 2 + 4));
     }
+    updateProperties();
   }
 
   function setTool(name) {
@@ -292,6 +337,37 @@
   }
   canvas.addEventListener('pointerup', endDrag);
   canvas.addEventListener('pointercancel', endDrag);
+
+  // Properties bar: a field is applied when it changes (Enter or leaving it), so one
+  // edit is one change to the net; a rejected value shows the stored one again. The
+  // node is the one selected when the field got focus: a click on the canvas changes
+  // the selection before the field loses focus and fires its change.
+  let editing = null;
+  labelInput.addEventListener('change', () => {
+    const id = editing;
+    if (id && findNode(id)) attempt(() => Petri.setLabel(net, id, labelInput.value));
+  });
+  tokensInput.addEventListener('change', () => {
+    const node = editing && findNode(editing);
+    if (!node) return;
+    const raw = tokensInput.value.trim();
+    attempt(() => Petri.setTokens(net, node.id, raw === '' ? raw : Number(raw)));
+    if (selectedNode() === node) tokensInput.value = node.tokens;
+  });
+  for (const input of [labelInput, tokensInput]) {
+    input.addEventListener('focus', () => {
+      const node = selectedNode();
+      editing = node && node.id;
+    });
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') input.blur();
+      if (event.key === 'Escape') {
+        const node = editing && findNode(editing);
+        if (node) input.value = input === labelInput ? node.label : node.tokens;
+        input.blur();
+      }
+    });
+  }
 
   for (const b of toolButtons) b.addEventListener('click', () => setTool(b.dataset.tool));
   deleteButton.addEventListener('click', deleteSelection);
