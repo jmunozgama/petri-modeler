@@ -28,6 +28,9 @@
   const modeButtons = document.querySelectorAll('[data-mode]');
   const resetButton = document.getElementById('reset');
   const deleteButton = document.getElementById('delete');
+  const exportButton = document.getElementById('export');
+  const importButton = document.getElementById('import');
+  const importFile = document.getElementById('import-file');
   const properties = document.getElementById('properties');
   const labelInput = document.getElementById('prop-label');
   const tokensField = document.getElementById('prop-tokens-field');
@@ -400,7 +403,40 @@
     });
   }
 
+  // ---- Export / import ----
+
+  function exportFile() {
+    const blob = new Blob([Petri.exportNet(net)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'petrinet.json';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000); // some browsers read it after click()
+  }
+
+  // The file is checked before asking: a rejected file never asks and changes nothing.
+  async function importChosen() {
+    const file = importFile.files[0];
+    importFile.value = ''; // choosing the same file again fires `change` again
+    if (!file) return;
+    let imported;
+    try {
+      imported = Petri.importNet(await file.text());
+    } catch (err) {
+      showMessage(`Import failed: ${err.message}`);
+      return;
+    }
+    const empty = net.places.length === 0 && net.transitions.length === 0;
+    if (!empty && !window.confirm('Replace the current net with the imported one?')) return;
+    net = imported;
+    setMode('edit');
+    showMessage(`Imported ${file.name}.`);
+  }
+
   for (const b of toolButtons) b.addEventListener('click', () => setTool(b.dataset.tool));
+  exportButton.addEventListener('click', exportFile);
+  importButton.addEventListener('click', () => importFile.click());
+  importFile.addEventListener('change', importChosen);
   deleteButton.addEventListener('click', deleteSelection);
   for (const b of modeButtons) b.addEventListener('click', () => setMode(b.dataset.mode));
   resetButton.addEventListener('click', () => {

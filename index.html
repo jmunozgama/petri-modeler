@@ -24,6 +24,11 @@
     <div class="group edit-only" role="group" aria-label="Edit">
       <button type="button" id="delete" title="Delete selection (Delete or Backspace)">Delete</button>
     </div>
+    <div class="group" role="group" aria-label="File">
+      <button type="button" id="export" title="Download the net as petrinet.json">Export</button>
+      <button type="button" id="import" title="Open a petrinet.json file">Import</button>
+      <input type="file" id="import-file" accept=".json,application/json" hidden>
+    </div>
     <div class="group edit-only" id="properties" role="group" aria-label="Properties" hidden>
       <label>Label <input type="text" id="prop-label" size="12"></label>
       <label id="prop-tokens-field">Tokens <input type="number" id="prop-tokens" min="0" step="1"></label>
