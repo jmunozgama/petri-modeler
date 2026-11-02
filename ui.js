@@ -9,6 +9,12 @@
   const TRANSITION_W = 30;
   const TRANSITION_H = 60;
   const MESSAGE_MS = 4000;
+  const MIN_ZOOM = 0.2;
+  const MAX_ZOOM = 5;
+  const FIT_MAX_ZOOM = 2;  // fit never blows a small net up more than this
+  const FIT_MARGIN = 60;   // net units around the nodes, room for labels
+  const BUTTON_ZOOM = 1.25;
+  const PAN_THRESHOLD = 4; // screen px a press must move to count as a drag
   const CURVE_BEND = 0.25; // control-point offset of a curved arc, as a share of its length
   const TOKEN_R = 5;
   const MAX_DOTS = 5; // more tokens than this are drawn as a number
@@ -31,6 +37,9 @@
   const exportButton = document.getElementById('export');
   const importButton = document.getElementById('import');
   const importFile = document.getElementById('import-file');
+  const zoomInButton = document.getElementById('zoom-in');
+  const zoomOutButton = document.getElementById('zoom-out');
+  const fitButton = document.getElementById('fit');
   const properties = document.getElementById('properties');
   const labelInput = document.getElementById('prop-label');
   const tokensField = document.getElementById('prop-tokens-field');
@@ -44,6 +53,8 @@
   let drag = null;    // {start, nodes: [{id, x, y}]}: selected nodes being moved
   let link = null;    // {source, line}: arc being drawn with the Arc tool
   let marquee = null; // {start, rect}: Shift+drag selection rectangle
+  let pan = null;     // {client, view, moved, click}: press on empty canvas
+  let view = { x: 0, y: 0, k: 1 }; // top-left corner in net units, and zoom
 
   // ---- Helpers ----
 
@@ -53,12 +64,17 @@
     return el;
   }
 
-  // Pointer position in net coordinates, so zoom and pan can later change the view only.
-  function toNet(event) {
+  // Pointer position in net coordinates: zoom and pan change the view only.
+  function netPoint(event) {
     const pt = canvas.createSVGPoint();
     pt.x = event.clientX;
     pt.y = event.clientY;
     const { x, y } = pt.matrixTransform(canvas.getScreenCTM().inverse());
+    return { x, y };
+  }
+
+  function toNet(event) {
+    const { x, y } = netPoint(event);
     return { x: Math.round(x), y: Math.round(y) };
   }
 
@@ -242,6 +258,75 @@
     }
   }
 
+  // ---- View: zoom and pan ----
+
+  function applyView() {
+    const w = canvas.clientWidth / view.k;
+    const h = canvas.clientHeight / view.k;
+    canvas.setAttribute('viewBox', `${view.x} ${view.y} ${w} ${h}`);
+  }
+
+  // Zooms keeping net point `p` under the same screen point.
+  function zoomAt(p, factor) {
+    const k = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, view.k * factor));
+    view = {
+      x: p.x - (p.x - view.x) * view.k / k,
+      y: p.y - (p.y - view.y) * view.k / k,
+      k,
+    };
+    applyView();
+  }
+
+  function zoomCentre(factor) {
+    const w = canvas.clientWidth / view.k;
+    const h = canvas.clientHeight / view.k;
+    zoomAt({ x: view.x + w / 2, y: view.y + h / 2 }, factor);
+  }
+
+  // Shows every node; an empty net gets the default view.
+  function fit() {
+    const nodes = [...net.places, ...net.transitions];
+    if (nodes.length === 0) {
+      view = { x: 0, y: 0, k: 1 };
+      return applyView();
+    }
+    const xs = nodes.map((n) => n.x);
+    const ys = nodes.map((n) => n.y);
+    const minX = Math.min(...xs) - FIT_MARGIN;
+    const minY = Math.min(...ys) - FIT_MARGIN;
+    const bw = Math.max(...xs) + FIT_MARGIN - minX;
+    const bh = Math.max(...ys) + FIT_MARGIN - minY;
+    const k = Math.min(FIT_MAX_ZOOM, canvas.clientWidth / bw, canvas.clientHeight / bh);
+    view = {
+      x: minX + bw / 2 - canvas.clientWidth / k / 2,
+      y: minY + bh / 2 - canvas.clientHeight / k / 2,
+      k,
+    };
+    applyView();
+  }
+
+  // A press on empty canvas pans if it moves; if it does not, it is a click.
+  function startPan(event, click) {
+    pan = { client: { x: event.clientX, y: event.clientY }, view: { ...view }, moved: false, click };
+  }
+
+  function movePan(event) {
+    const dx = event.clientX - pan.client.x;
+    const dy = event.clientY - pan.client.y;
+    if (!pan.moved && Math.hypot(dx, dy) < PAN_THRESHOLD) return;
+    pan.moved = true;
+    canvas.classList.add('panning');
+    view = { ...view, x: pan.view.x - dx / view.k, y: pan.view.y - dy / view.k };
+    applyView();
+  }
+
+  function endPan(event) {
+    const { moved, click } = pan;
+    pan = null;
+    canvas.classList.remove('panning');
+    if (!moved && event.type === 'pointerup') click();
+  }
+
   // ---- Interaction ----
 
   function startMoving(at) {
@@ -254,14 +339,9 @@
   function selectDown(event, at) {
     const el = event.target.closest('.node, .arc');
     if (!el) {
-      if (event.shiftKey) {
-        const rect = svg('rect', { class: 'marquee', x: at.x, y: at.y, width: 0, height: 0 });
-        overlay.append(rect);
-        marquee = { start: at, rect };
-      } else {
-        selection.clear();
-      }
-      render();
+      const rect = svg('rect', { class: 'marquee', x: at.x, y: at.y, width: 0, height: 0 });
+      overlay.append(rect);
+      marquee = { start: at, rect };
       return;
     }
     const id = el.dataset.id;
@@ -314,14 +394,13 @@
     const at = toNet(event);
     canvas.setPointerCapture(event.pointerId);
 
+    // Only the Select tool can pick arcs; for everything else an arc is empty canvas.
+    const picksArcs = mode === 'edit' && tool === 'select';
+    const hit = picksArcs ? event.target.closest('.node, .arc') : nodeEl;
+    if (!hit && !(picksArcs && event.shiftKey)) return startPan(event, () => emptyClick(at));
+
     if (mode === 'play') return playDown(nodeEl);
     if (tool === 'select') return selectDown(event, at);
-
-    if (!nodeEl) {
-      if (tool === 'place') attempt(() => Petri.addPlace(net, at));
-      else if (tool === 'transition') attempt(() => Petri.addTransition(net, at));
-      return;
-    }
 
     if (tool === 'arc') {
       const from = findNode(nodeEl.dataset.id);
@@ -331,7 +410,21 @@
     }
   });
 
+  // A click (no drag) on empty canvas: create a node, or clear the selection.
+  function emptyClick(at) {
+    if (mode !== 'edit') return;
+    if (tool === 'select') {
+      selection.clear();
+      render();
+    } else if (tool === 'place') {
+      attempt(() => Petri.addPlace(net, at));
+    } else if (tool === 'transition') {
+      attempt(() => Petri.addTransition(net, at));
+    }
+  }
+
   canvas.addEventListener('pointermove', (event) => {
+    if (pan) return movePan(event);
     if (link) {
       const at = toNet(event);
       link.line.setAttribute('x2', at.x);
@@ -364,6 +457,7 @@
   }
 
   function endDrag(event) {
+    if (pan) endPan(event);
     if (link) finishLink(event);
     if (marquee) finishMarquee(event);
     drag = null;
@@ -430,6 +524,7 @@
     if (!empty && !window.confirm('Replace the current net with the imported one?')) return;
     net = imported;
     setMode('edit');
+    fit();
     showMessage(`Imported ${file.name}.`);
   }
 
@@ -437,6 +532,18 @@
   exportButton.addEventListener('click', exportFile);
   importButton.addEventListener('click', () => importFile.click());
   importFile.addEventListener('change', importChosen);
+  zoomInButton.addEventListener('click', () => zoomCentre(BUTTON_ZOOM));
+  zoomOutButton.addEventListener('click', () => zoomCentre(1 / BUTTON_ZOOM));
+  fitButton.addEventListener('click', fit);
+  window.addEventListener('resize', applyView);
+
+  // Wheel and trackpad pinch (a wheel event with ctrlKey) zoom around the pointer.
+  canvas.addEventListener('wheel', (event) => {
+    event.preventDefault();
+    const pixels = event.deltaMode === 1 ? event.deltaY * 16 : event.deltaY;
+    const speed = event.ctrlKey ? 0.01 : 0.002;
+    zoomAt(netPoint(event), Math.exp(-pixels * speed));
+  }, { passive: false });
   deleteButton.addEventListener('click', deleteSelection);
   for (const b of modeButtons) b.addEventListener('click', () => setMode(b.dataset.mode));
   resetButton.addEventListener('click', () => {
@@ -454,4 +561,5 @@
 
   setTool('select');
   setMode('edit');
+  applyView();
 })();

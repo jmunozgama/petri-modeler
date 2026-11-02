@@ -66,6 +66,7 @@ body.play #toolbar .edit-only, body:not(.play) #toolbar .play-only { display: no
 }
 
 #canvas.tool-place, #canvas.tool-transition { cursor: crosshair; }
+#canvas.panning, #canvas.panning .node { cursor: grabbing; }
 
 .node { cursor: default; }
 #canvas.tool-select .node { cursor: move; }

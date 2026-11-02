@@ -29,6 +29,11 @@
       <button type="button" id="import" title="Open a petrinet.json file">Import</button>
       <input type="file" id="import-file" accept=".json,application/json" hidden>
     </div>
+    <div class="group" role="group" aria-label="View">
+      <button type="button" id="zoom-in" title="Zoom in">+</button>
+      <button type="button" id="zoom-out" title="Zoom out">−</button>
+      <button type="button" id="fit" title="Fit the net to the screen">Fit</button>
+    </div>
     <div class="group edit-only" id="properties" role="group" aria-label="Properties" hidden>
       <label>Label <input type="text" id="prop-label" size="12"></label>
       <label id="prop-tokens-field">Tokens <input type="number" id="prop-tokens" min="0" step="1"></label>
