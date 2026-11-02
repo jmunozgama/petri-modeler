@@ -122,7 +122,8 @@ Two modes, switched with a toolbar button; the current mode is always visible.
   empty; the tool switches to Edit mode.
 - Import rejects, with a message and the current net unchanged: invalid JSON, wrong
   `format` or `version`, missing fields, duplicate ids, arcs to unknown nodes, invalid
-  or duplicate arcs, tokens that are not integers ≥ 0.
+  or duplicate arcs, tokens that are not integers ≥ 0, place ids not of the form `p<n>`
+  or transition ids not of the form `t<n>` (n a positive integer).
 - `importNet(exportNet(net))` gives the same net.
 
 ## Out of scope

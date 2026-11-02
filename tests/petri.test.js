@@ -553,6 +553,10 @@ describe('JSON import and export', () => {
     'duplicate place id': withChange((d) => { d.places.push({ ...d.places[0] }); }),
     'duplicate transition id': withChange((d) => { d.transitions.push({ ...d.transitions[0] }); }),
     'same id for a place and a transition': withChange((d) => { d.transitions[0].id = 'p1'; d.arcs = []; }),
+    'place id not of the form p<n>': withChange((d) => { d.places[0].id = 'start'; d.arcs[0].source = 'start'; }),
+    'place id of the form t<n>': withChange((d) => { d.places[0].id = 't5'; d.arcs[0].source = 't5'; }),
+    'transition id not of the form t<n>': withChange((d) => { d.transitions[0].id = 'end'; d.arcs[0].target = 'end'; }),
+    'place id p0': withChange((d) => { d.places[0].id = 'p0'; d.arcs[0].source = 'p0'; }),
     'arc to an unknown node': withChange((d) => { d.arcs[0].target = 't9'; }),
     'arc from an unknown node': withChange((d) => { d.arcs[0].source = 'p9'; }),
     'place→place arc': withChange((d) => {
