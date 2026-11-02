@@ -61,9 +61,23 @@ Two modes, switched with a toolbar button; the current mode is always visible.
 - Place / Transition tool: click on empty canvas creates the node there.
 - Arc tool: drag from a node to another node creates the arc (or shows the rejection
   message).
-- Select tool: click selects one element (node or arc); drag moves a node, its arcs
-  follow. Delete or Backspace, or the Delete button, deletes the selection.
-- Selected node: a properties bar edits its label and, for a place, its tokens.
+- Select tool: click selects one element (node or arc); Shift+click adds or removes an
+  element from the selection; Shift+drag on empty canvas selects every node and arc
+  inside the rectangle. Click on empty canvas clears the selection.
+- Dragging a selected node moves every selected node; their arcs follow.
+- Delete or Backspace, or the Delete button, deletes the whole selection (with the
+  arcs attached to deleted nodes).
+- **Context pad**: hovering or selecting a single node shows small buttons next to it:
+  - on a place, "append transition"; on a transition, "append place": creates the new
+    node to the right of it, joined by an arc from it, and selects the new node;
+  - "connect": the next click on another node creates an arc to it (or shows the
+    rejection message); Escape or a click on empty canvas cancels.
+- Selected node (only one): a properties bar edits its label and, for a place, its
+  tokens.
+- **Undo / redo**: Cmd/Ctrl+Z and Shift+Cmd/Ctrl+Z, and toolbar buttons. Every change
+  to the net is one step (create, delete, move, connect, label, tokens, import); a
+  deletion of several elements is one step. Unlimited within the visit; a new change
+  after undo drops the redo steps. Play firings are not steps.
 - Messages (rejections, import errors) appear in a status bar for a few seconds.
 
 **Play mode**
@@ -74,12 +88,18 @@ Two modes, switched with a toolbar button; the current mode is always visible.
   net to its initial marking; the play marking is never kept.
 - A dead marking needs no message: no highlighted transition shows it.
 
+**View (both modes)**
+- Zoom: mouse wheel or trackpad pinch around the pointer, plus zoom in, zoom out and
+  fit-to-screen buttons.
+- Pan: dragging on empty canvas moves the view, with any tool and in Play. A click
+  without dragging keeps its normal meaning (create a node, clear the selection).
+- Zoom and pan change only the view, never the net, and are not undo steps.
+
 **Rendering**
 - Places are circles, transitions are rectangles, arcs are straight arrows; a pair of
   opposite arcs (p→t and t→p) is drawn as two curves so both are visible.
 - Tokens: 1 to 5 as dots, more than 5 as a number.
-- Projector: black on white, labels at least 16 px at 100% zoom; zoom in, zoom out
-  and fit-to-screen buttons.
+- Projector: black on white, labels at least 16 px at 100% zoom.
 
 ## JSON format
 
@@ -93,7 +113,7 @@ Two modes, switched with a toolbar button; the current mode is always visible.
 }
 ```
 
-- Export downloads the current net (with its initial marking) as `net.json`.
+- Export downloads the current net (with its initial marking) as `petrinet.json`.
 - Import replaces the current net after a confirmation when the current net is not
   empty; the tool switches to Edit mode.
 - Import rejects, with a message and the current net unchanged: invalid JSON, wrong
@@ -104,5 +124,5 @@ Two modes, switched with a toolbar button; the current mode is always visible.
 ## Out of scope
 
 - Arc weights, capacities, inhibitor arcs; WF-net or soundness checks; reachability
-  graph; PNML; undo/redo; saving between visits (export/import only); multi-select,
-  copy/paste; firing animation; touch-first use.
+  graph; PNML; saving between visits (export/import only); copy/paste; firing
+  animation; touch-first use.
