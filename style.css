@@ -32,6 +32,12 @@ body {
   cursor: pointer;
 }
 
+#toolbar button:disabled {
+  color: #999;
+  border-color: #999;
+  cursor: default;
+}
+
 #toolbar button.active {
   background: #000;
   color: #fff;
@@ -68,6 +74,20 @@ body {
 }
 
 #canvas.tool-arc .node { cursor: crosshair; }
+#canvas.tool-select .arc { cursor: pointer; }
+
+/* Selection is the one colour in Edit mode. */
+.node.selected circle, .node.selected rect { stroke: #1565c0; stroke-width: 4; }
+.arc.selected path:not(.hit) { stroke: #1565c0; stroke-width: 3; }
+#arrow-selected path { fill: #1565c0; }
+
+.marquee {
+  fill: rgba(21, 101, 192, 0.08);
+  stroke: #1565c0;
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  pointer-events: none;
+}
 
 .rubber {
   stroke: #000;

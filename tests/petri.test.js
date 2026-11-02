@@ -7,7 +7,7 @@ const Petri = require('../petri.js');
 
 const {
   createNet, addPlace, addTransition, addArc, remove, setLabel, setTokens, move,
-  initialMarking, isEnabled, enabledTransitions, fire, exportNet, importNet,
+  initialMarking, isEnabled, enabledTransitions, fire, exportNet, importNet, arcId,
 } = Petri;
 
 // The net as the JSON format describes it.
@@ -265,6 +265,17 @@ describe('deletion', () => {
     assert.deepEqual(place(net, p1), { id: p1, label: p1, x: 0, y: 0, tokens: 2 });
     assert.deepEqual(transition(net, t1), { id: t1, label: t1, x: 0, y: 0 });
     assert.deepEqual(initialMarking(net), { [p1]: 2 });
+  });
+
+  test('arcId gives the id addArc returned, so an existing arc can be deleted', () => {
+    const net = createNet();
+    const p1 = addPlace(net, { x: 0, y: 0 });
+    const t1 = addTransition(net, { x: 0, y: 0 });
+    const arc = addArc(net, p1, t1);
+    addArc(net, t1, p1);
+    assert.equal(arcId(p1, t1), arc);
+    remove(net, arcId(t1, p1));
+    assert.deepEqual(arcs(net), [{ source: p1, target: t1 }]);
   });
 
   test('deleting a node in a self-loop deletes both arcs', () => {

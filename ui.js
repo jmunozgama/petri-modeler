@@ -14,11 +14,14 @@
   const canvas = document.getElementById('canvas');
   const status = document.getElementById('status');
   const toolButtons = document.querySelectorAll('[data-tool]');
+  const deleteButton = document.getElementById('delete');
 
   let net = Petri.createNet();
   let tool = 'select';
-  let drag = null; // {id, dx, dy}: node being moved and pointer offset from its centre
-  let link = null;  // {source, line}: arc being drawn with the Arc tool
+  let selection = new Set(); // ids of selected nodes and arcs
+  let drag = null;    // {start, nodes: [{id, x, y}]}: selected nodes being moved
+  let link = null;    // {source, line}: arc being drawn with the Arc tool
+  let marquee = null; // {start, rect}: Shift+drag selection rectangle
 
   // ---- Helpers ----
 
@@ -66,7 +69,9 @@
     markerWidth: 10, markerHeight: 10, markerUnits: 'userSpaceOnUse', orient: 'auto',
   });
   arrow.append(svg('path', { d: 'M0,0 L10,5 L0,10 z' }));
-  defs.append(arrow);
+  const arrowSelected = arrow.cloneNode(true);
+  arrowSelected.id = 'arrow-selected';
+  defs.append(arrow, arrowSelected);
   const arcLayer = svg('g', {});
   const nodeLayer = svg('g', {});
   const overlay = svg('g', {});
@@ -106,7 +111,9 @@
   }
 
   function nodeGroup(node, shape, labelY) {
-    const g = svg('g', { class: 'node', 'data-id': node.id });
+    const g = svg('g', {
+      class: selection.has(node.id) ? 'node selected' : 'node', 'data-id': node.id,
+    });
     g.append(shape);
     const label = svg('text', { class: 'label', x: node.x, y: labelY });
     label.textContent = node.label;
@@ -115,12 +122,25 @@
   }
 
   function render() {
+    // Elements deleted from the net leave the selection.
+    const ids = new Set([...net.places, ...net.transitions].map((n) => n.id));
+    for (const a of net.arcs) ids.add(Petri.arcId(a.source, a.target));
+    selection = new Set([...selection].filter((id) => ids.has(id)));
+    deleteButton.disabled = selection.size === 0;
+
     arcLayer.replaceChildren();
     nodeLayer.replaceChildren();
     for (const arc of net.arcs) {
+      const id = Petri.arcId(arc.source, arc.target);
+      const selected = selection.has(id);
       const d = arcPath(arc);
-      const g = svg('g', { class: 'arc', 'data-source': arc.source, 'data-target': arc.target });
-      g.append(svg('path', { class: 'hit', d }), svg('path', { d, 'marker-end': 'url(#arrow)' }));
+      const g = svg('g', {
+        class: selected ? 'arc selected' : 'arc',
+        'data-id': id, 'data-source': arc.source, 'data-target': arc.target,
+      });
+      g.append(
+        svg('path', { class: 'hit', d }),
+        svg('path', { d, 'marker-end': selected ? 'url(#arrow-selected)' : 'url(#arrow)' }));
       arcLayer.append(g);
     }
     for (const p of net.places) {
@@ -146,10 +166,77 @@
 
   // ---- Interaction ----
 
+  function startMoving(at) {
+    const nodes = [...selection].map(findNode).filter(Boolean).map(({ id, x, y }) => ({ id, x, y }));
+    drag = { start: at, nodes };
+  }
+
+  // Select tool: click selects one element, Shift+click toggles one, Shift+drag on
+  // empty canvas draws a rectangle, dragging a node moves the whole selection.
+  function selectDown(event, at) {
+    const el = event.target.closest('.node, .arc');
+    if (!el) {
+      if (event.shiftKey) {
+        const rect = svg('rect', { class: 'marquee', x: at.x, y: at.y, width: 0, height: 0 });
+        overlay.append(rect);
+        marquee = { start: at, rect };
+      } else {
+        selection.clear();
+      }
+      render();
+      return;
+    }
+    const id = el.dataset.id;
+    if (event.shiftKey) {
+      if (selection.has(id)) selection.delete(id);
+      else selection.add(id);
+    } else if (!selection.has(id)) {
+      selection = new Set([id]);
+    }
+    if (!event.shiftKey && el.classList.contains('node')) startMoving(at);
+    render();
+  }
+
+  function marqueeBox(at) {
+    const { start } = marquee;
+    return {
+      x: Math.min(start.x, at.x), y: Math.min(start.y, at.y),
+      width: Math.abs(at.x - start.x), height: Math.abs(at.y - start.y),
+    };
+  }
+
+  // Adds every node whose centre is inside the rectangle, and every arc whose two
+  // nodes are.
+  function finishMarquee(event) {
+    const box = marqueeBox(toNet(event));
+    marquee.rect.remove();
+    marquee = null;
+    const inside = (n) => n.x >= box.x && n.x <= box.x + box.width
+      && n.y >= box.y && n.y <= box.y + box.height;
+    const nodes = new Set([...net.places, ...net.transitions].filter(inside).map((n) => n.id));
+    for (const id of nodes) selection.add(id);
+    for (const a of net.arcs) {
+      if (nodes.has(a.source) && nodes.has(a.target)) selection.add(Petri.arcId(a.source, a.target));
+    }
+    render();
+  }
+
+  // Deletes arcs first: an arc attached to a deleted node is gone afterwards.
+  function deleteSelection() {
+    if (selection.size === 0) return;
+    const isArc = (id) => net.arcs.some((a) => Petri.arcId(a.source, a.target) === id);
+    const arcs = [...selection].filter(isArc);
+    const nodes = [...selection].filter((id) => !isArc(id));
+    attempt(() => { for (const id of [...arcs, ...nodes]) Petri.remove(net, id); });
+  }
+
   canvas.addEventListener('pointerdown', (event) => {
     if (event.button !== 0) return;
     const nodeEl = event.target.closest('.node');
     const at = toNet(event);
+    canvas.setPointerCapture(event.pointerId);
+
+    if (tool === 'select') return selectDown(event, at);
 
     if (!nodeEl) {
       if (tool === 'place') attempt(() => Petri.addPlace(net, at));
@@ -162,11 +249,6 @@
       const line = svg('line', { class: 'rubber', x1: from.x, y1: from.y, x2: at.x, y2: at.y });
       overlay.append(line);
       link = { source: from.id, line };
-      canvas.setPointerCapture(event.pointerId);
-    } else if (tool === 'select') {
-      const node = findNode(nodeEl.dataset.id);
-      drag = { id: node.id, dx: at.x - node.x, dy: at.y - node.y };
-      canvas.setPointerCapture(event.pointerId);
     }
   });
 
@@ -177,9 +259,15 @@
       link.line.setAttribute('y2', at.y);
       return;
     }
+    if (marquee) {
+      for (const [k, v] of Object.entries(marqueeBox(toNet(event)))) marquee.rect.setAttribute(k, v);
+      return;
+    }
     if (!drag) return;
     const at = toNet(event);
-    attempt(() => Petri.move(net, drag.id, at.x - drag.dx, at.y - drag.dy));
+    const dx = at.x - drag.start.x;
+    const dy = at.y - drag.start.y;
+    attempt(() => { for (const n of drag.nodes) Petri.move(net, n.id, n.x + dx, n.y + dy); });
   });
 
   // Dropping a new arc on another node asks Petri to add it; dropping it on empty
@@ -198,6 +286,7 @@
 
   function endDrag(event) {
     if (link) finishLink(event);
+    if (marquee) finishMarquee(event);
     drag = null;
     if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
   }
@@ -205,6 +294,15 @@
   canvas.addEventListener('pointercancel', endDrag);
 
   for (const b of toolButtons) b.addEventListener('click', () => setTool(b.dataset.tool));
+  deleteButton.addEventListener('click', deleteSelection);
+
+  document.addEventListener('keydown', (event) => {
+    if (event.target.closest('input, textarea')) return;
+    if (event.key === 'Delete' || event.key === 'Backspace') {
+      event.preventDefault();
+      deleteSelection();
+    }
+  });
 
   setTool('select');
   render();

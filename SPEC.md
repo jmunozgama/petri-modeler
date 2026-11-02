@@ -43,7 +43,7 @@ is either a test or something checked by looking at the page.
 - Edit: `createNet()`, `addPlace(net, {x, y, label?, tokens?})` → id,
   `addTransition(net, {x, y, label?})` → id, `addArc(net, source, target)` → arc id
   (not written to JSON),
-  `remove(net, id)` (node or arc), `setLabel(net, id, label)`,
+  `arcId(source, target)` → the id of that arc, `remove(net, id)` (node or arc), `setLabel(net, id, label)`,
   `setTokens(net, placeId, n)`, `move(net, id, x, y)`.
 - Play: `initialMarking(net)` → `{placeId: n}` with every place, zeros included;
   `isEnabled(net, M, t)`; `enabledTransitions(net, M)`; `fire(net, M, t)` → new

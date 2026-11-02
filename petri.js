@@ -227,7 +227,7 @@
 
   const Petri = {
     createNet, addPlace, addTransition, addArc, remove, setLabel, setTokens, move,
-    initialMarking, isEnabled, enabledTransitions, fire, exportNet, importNet,
+    initialMarking, isEnabled, enabledTransitions, fire, exportNet, importNet, arcId,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Petri;
