@@ -9,6 +9,7 @@
   const TRANSITION_W = 30;
   const TRANSITION_H = 60;
   const MESSAGE_MS = 4000;
+  const CURVE_BEND = 0.25; // control-point offset of a curved arc, as a share of its length
 
   const canvas = document.getElementById('canvas');
   const status = document.getElementById('status');
@@ -17,6 +18,7 @@
   let net = Petri.createNet();
   let tool = 'select';
   let drag = null; // {id, dx, dy}: node being moved and pointer offset from its centre
+  let link = null;  // {source, line}: arc being drawn with the Arc tool
 
   // ---- Helpers ----
 
@@ -34,6 +36,9 @@
     const { x, y } = pt.matrixTransform(canvas.getScreenCTM().inverse());
     return { x: Math.round(x), y: Math.round(y) };
   }
+
+  const findNode = (id) =>
+    net.places.find((p) => p.id === id) || net.transitions.find((t) => t.id === id);
 
   let messageTimer = null;
   function showMessage(text) {
@@ -54,6 +59,52 @@
 
   // ---- Rendering ----
 
+  // Static layers: arcs under nodes, the rubber band of a new arc on top.
+  const defs = svg('defs', {});
+  const arrow = svg('marker', {
+    id: 'arrow', viewBox: '0 0 10 10', refX: 10, refY: 5,
+    markerWidth: 10, markerHeight: 10, markerUnits: 'userSpaceOnUse', orient: 'auto',
+  });
+  arrow.append(svg('path', { d: 'M0,0 L10,5 L0,10 z' }));
+  defs.append(arrow);
+  const arcLayer = svg('g', {});
+  const nodeLayer = svg('g', {});
+  const overlay = svg('g', {});
+  canvas.append(defs, arcLayer, nodeLayer, overlay);
+
+  // Point where the line from the centre of `node` towards `to` leaves its shape.
+  function boundary(node, isPlace, to) {
+    const dx = to.x - node.x;
+    const dy = to.y - node.y;
+    const len = Math.hypot(dx, dy) || 1;
+    if (isPlace) return { x: node.x + dx / len * PLACE_R, y: node.y + dy / len * PLACE_R };
+    const k = Math.min(
+      dx ? TRANSITION_W / 2 / Math.abs(dx) : Infinity,
+      dy ? TRANSITION_H / 2 / Math.abs(dy) : Infinity);
+    return { x: node.x + dx * k, y: node.y + dy * k };
+  }
+
+  // A straight arrow, or a curve bent to its left when the opposite arc also exists,
+  // so both arcs of a pair stay visible.
+  function arcPath(arc) {
+    const fromPlace = net.places.some((p) => p.id === arc.source);
+    const a = findNode(arc.source);
+    const b = findNode(arc.target);
+    const paired = net.arcs.some((o) => o.source === arc.target && o.target === arc.source);
+    if (!paired) {
+      const s = boundary(a, fromPlace, b);
+      const e = boundary(b, !fromPlace, a);
+      return `M${s.x},${s.y} L${e.x},${e.y}`;
+    }
+    const c = {
+      x: (a.x + b.x) / 2 + (b.y - a.y) * CURVE_BEND,
+      y: (a.y + b.y) / 2 - (b.x - a.x) * CURVE_BEND,
+    };
+    const s = boundary(a, fromPlace, c);
+    const e = boundary(b, !fromPlace, c);
+    return `M${s.x},${s.y} Q${c.x},${c.y} ${e.x},${e.y}`;
+  }
+
   function nodeGroup(node, shape, labelY) {
     const g = svg('g', { class: 'node', 'data-id': node.id });
     g.append(shape);
@@ -64,14 +115,21 @@
   }
 
   function render() {
-    canvas.replaceChildren();
+    arcLayer.replaceChildren();
+    nodeLayer.replaceChildren();
+    for (const arc of net.arcs) {
+      const d = arcPath(arc);
+      const g = svg('g', { class: 'arc', 'data-source': arc.source, 'data-target': arc.target });
+      g.append(svg('path', { class: 'hit', d }), svg('path', { d, 'marker-end': 'url(#arrow)' }));
+      arcLayer.append(g);
+    }
     for (const p of net.places) {
-      canvas.append(nodeGroup(p,
+      nodeLayer.append(nodeGroup(p,
         svg('circle', { cx: p.x, cy: p.y, r: PLACE_R }),
         p.y + PLACE_R + 4));
     }
     for (const t of net.transitions) {
-      canvas.append(nodeGroup(t,
+      nodeLayer.append(nodeGroup(t,
         svg('rect', {
           x: t.x - TRANSITION_W / 2, y: t.y - TRANSITION_H / 2,
           width: TRANSITION_W, height: TRANSITION_H,
@@ -88,9 +146,6 @@
 
   // ---- Interaction ----
 
-  const findNode = (id) =>
-    net.places.find((p) => p.id === id) || net.transitions.find((t) => t.id === id);
-
   canvas.addEventListener('pointerdown', (event) => {
     if (event.button !== 0) return;
     const nodeEl = event.target.closest('.node');
@@ -102,7 +157,13 @@
       return;
     }
 
-    if (tool === 'select') {
+    if (tool === 'arc') {
+      const from = findNode(nodeEl.dataset.id);
+      const line = svg('line', { class: 'rubber', x1: from.x, y1: from.y, x2: at.x, y2: at.y });
+      overlay.append(line);
+      link = { source: from.id, line };
+      canvas.setPointerCapture(event.pointerId);
+    } else if (tool === 'select') {
       const node = findNode(nodeEl.dataset.id);
       drag = { id: node.id, dx: at.x - node.x, dy: at.y - node.y };
       canvas.setPointerCapture(event.pointerId);
@@ -110,13 +171,33 @@
   });
 
   canvas.addEventListener('pointermove', (event) => {
+    if (link) {
+      const at = toNet(event);
+      link.line.setAttribute('x2', at.x);
+      link.line.setAttribute('y2', at.y);
+      return;
+    }
     if (!drag) return;
     const at = toNet(event);
     attempt(() => Petri.move(net, drag.id, at.x - drag.dx, at.y - drag.dy));
   });
 
+  // Dropping a new arc on another node asks Petri to add it; dropping it on empty
+  // canvas or back on its source cancels it.
+  function finishLink(event) {
+    const { source, line } = link;
+    link = null;
+    line.remove();
+    if (event.type !== 'pointerup') return;
+    const hit = document.elementFromPoint(event.clientX, event.clientY);
+    const nodeEl = hit && hit.closest('#canvas .node');
+    if (nodeEl && nodeEl.dataset.id !== source) {
+      attempt(() => Petri.addArc(net, source, nodeEl.dataset.id));
+    }
+  }
+
   function endDrag(event) {
-    if (!drag) return;
+    if (link) finishLink(event);
     drag = null;
     if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
   }

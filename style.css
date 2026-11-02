@@ -56,12 +56,37 @@ body {
   stroke-width: 2;
 }
 
+.arc path {
+  fill: none;
+  stroke: #000;
+  stroke-width: 2;
+}
+
+.arc .hit {
+  stroke: transparent;
+  stroke-width: 12;
+}
+
+#canvas.tool-arc .node { cursor: crosshair; }
+
+.rubber {
+  stroke: #000;
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+  pointer-events: none;
+}
+
 .label {
   font-size: 16px;
   fill: #000;
   text-anchor: middle;
   dominant-baseline: hanging;
   pointer-events: none;
+  /* white halo keeps a label readable when an arc passes under it */
+  paint-order: stroke;
+  stroke: #fff;
+  stroke-width: 8px;
+  stroke-linejoin: round;
 }
 
 #status {
